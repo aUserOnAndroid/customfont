@@ -15,3 +15,15 @@
 		"geode.node-ids": ">=v1.23.3"
 	}
 }
+
+{
+    "geode": "v1.0.0",
+    "gd": {
+        "win": "*",
+        "android": "*"
+    }
+    "id": "emir.jolly",
+    "name": "My Awesome Mod",
+    "version": "v1.0.0",
+    "developers": ["Me","Friendly Developer"]
+}
