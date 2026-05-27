@@ -1,6 +1,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/MenuLayer.hpp>
-#include "EmirGui.hpp" 
+#include "EmirGui.hpp"
 
 using namespace geode::prelude;
 
@@ -8,29 +8,22 @@ class $modify(MyMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
 
-        // "bottom-menu" düğümünü bul
-        auto menu = static_cast<CCMenu*>(this->getChildByID("bottom-menu"));
-
-        // Kütüphane üzerinden butonu oluştur
-        auto btn = EmirGui::createCircleBtn(
-            "GJ_likeBtn_001.png", 
+        // Ekranda her zaman görünecek "Emir" butonu
+        auto btn = CCMenuItemSpriteExtra::create(
+            ButtonSprite::create("Emir"), 
             this, 
-            menu_selector(MyMenuLayer::onEmirClick)
+            menu_selector(MyMenuLayer::onOpenEmir)
         );
-
-        btn->setID("emir-buton"_spr);
-
-        // Kütüphane üzerinden menüye ekle ve hizala
-        EmirGui::addToMenu(menu, btn);
+        
+        auto menu = CCMenu::create();
+        menu->setPosition({50, 50}); // Ekranın sol alt köşesi
+        menu->addChild(btn);
+        this->addChild(menu);
 
         return true;
     }
 
-    void onEmirClick(CCObject* sender) {
-        FLAlertLayer::create(
-            "Başarılı!", 
-            "EmirGui kütüphanesi sorunsuz çalışıyor.", 
-            "Tamam"
-        )->show();
+    void onOpenEmir(CCObject* sender) {
+        EmirGui::EmirMenu::create()->show();
     }
 };
