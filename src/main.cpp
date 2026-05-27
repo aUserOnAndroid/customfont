@@ -1,100 +1,69 @@
-/**
- * Include the Geode headers.
- */
 #include <Geode/Geode.hpp>
+#include <Geode/modify/MenuLayer.hpp>
+#include <Geode/ui/GeodeUI.hpp>
 
-/**
- * Brings cocos2d and all Geode namespaces to the current scope.
- */
 using namespace geode::prelude;
 
-/**
- * `$modify` lets you extend and modify GD's classes.
- * To hook a function in Geode, simply $modify the class
- * and write a new function definition with the signature of
- * the function you want to hook.
- *
- * Here we use the overloaded `$modify` macro to set our own class name,
- * so that we can use it for button callbacks.
- *
- * Notice the header being included, you *must* include the header for
- * the class you are modifying, or you will get a compile error.
- *
- * Another way you could do this is like this:
- *
- * struct MyMenuLayer : Modify<MyMenuLayer, MenuLayer> {};
- */
-#include <Geode/modify/MenuLayer.hpp>
+// --- Custom GUI Sınıfı ---
+class MyGuiPanel : public FLAlertLayer {
+public:
+    static MyGuiPanel* create() {
+        auto ret = new MyGuiPanel();
+        if (ret && ret->init(200, 150, "GJ_square01.png", "Baslik")) {
+            ret->autorelease();
+            return ret;
+        }
+        CC_SAFE_DELETE(ret);
+        return nullptr;
+    }
+
+    bool setup() override {
+        auto winSize = CCDirector::get()->getWinSize();
+        
+        // Panel içeriği buraya gelir
+        auto label = CCLabelBMFont::create("Arayüz Açıldı!", "bigFont.fnt");
+        label->setScale(0.6f);
+        label->setPosition(m_mainLayer->getContentSize() / 2);
+        m_mainLayer->addChild(label);
+
+        return true;
+    }
+};
+
+// --- MenuLayer Hook ---
 class $modify(MyMenuLayer, MenuLayer) {
-	/**
-	 * Typically classes in GD are initialized using the `init` function, (though not always!),
-	 * so here we use it to add our own button to the bottom menu.
-	 *
-	 * Note that for all hooks, your signature has to *match exactly*,
-	 * `void init()` would not place a hook!
-	*/
-	bool init() {
-		/**
-		 * We call the original init function so that the
-		 * original class is properly initialized.
-		 */
-		if (!MenuLayer::init()) {
-			return false;
-		}
+    // Panel referansını tutmak için bir değişken (zayıf referans)
+    Ref<MyGuiPanel> m_myPanel = nullptr;
 
-		/**
-		 * You can use methods from the `geode::log` namespace to log messages to the console,
-		 * being useful for debugging and such. See this page for more info about logging:
-		 * https://docs.geode-sdk.org/tutorials/logging
-		*/
-		log::debug("Hello from my MenuLayer::init hook! This layer has {} children.", this->getChildrenCount());
+    bool init() {
+        if (!MenuLayer::init()) return false;
 
-		/**
-		 * See this page for more info about buttons
-		 * https://docs.geode-sdk.org/tutorials/buttons
-		*/
-		auto myButton = CCMenuItemSpriteExtra::create(
-			CCSprite::createWithSpriteFrameName("GJ_likeBtn_001.png"),
-			this,
-			/**
-			 * Here we use the name we set earlier for our modify class.
-			*/
-			menu_selector(MyMenuLayer::onMyButton)
-		);
+        auto menu = this->getChildByID("bottom-menu");
 
-		/**
-		 * Here we access the `bottom-menu` node by its ID, and add our button to it.
-		 * Node IDs are a Geode feature, see this page for more info about it:
-		 * https://docs.geode-sdk.org/tutorials/nodetree
-		*/
-		auto menu = this->getChildByID("bottom-menu");
-		menu->addChild(myButton);
+        // Özel butonumuz
+        auto myButton = CCMenuItemSpriteExtra::create(
+            CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png"),
+            this,
+            menu_selector(MyMenuLayer::onMyButton)
+        );
 
-		/**
-		 * The `_spr` string literal operator just prefixes the string with
-		 * your mod id followed by a slash. This is good practice for setting your own node ids.
-		*/
-		myButton->setID("my-button"_spr);
+        myButton->setID("my-gui-button"_spr);
+        menu->addChild(myButton);
+        menu->updateLayout();
 
-		/**
-		 * We update the layout of the menu to ensure that our button is properly placed.
-		 * This is yet another Geode feature, see this page for more info about it:
-		 * https://docs.geode-sdk.org/tutorials/layouts
-		*/
-		menu->updateLayout();
+        return true;
+    }
 
-		/**
-		 * We return `true` to indicate that the class was properly initialized.
-		 */
-		return true;
-	}
+    void onMyButton(CCObject*) {
+        // Eğer panel zaten varsa ve ekrandaysa kapat
+        if (m_myPanel) {
+            m_myPanel->onClose(nullptr);
+            m_myPanel = nullptr;
+            return;
+        }
 
-	/**
-	 * This is the callback function for the button we created earlier.
-	 * The signature for button callbacks must always be the same,
-	 * return type `void` and taking a `CCObject*`.
-	*/
-	void onMyButton(CCObject*) {
-		FLAlertLayer::create("Geode", "Hello from my custom mod!", "OK")->show();
-	}
+        // Panel yoksa oluştur ve göster
+        m_myPanel = MyGuiPanel::create();
+        m_myPanel->show();
+    }
 };
