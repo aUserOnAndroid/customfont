@@ -1,6 +1,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/MenuLayer.hpp>
-#include "EmirGui.hpp" // Kütüphanemizi çağırdık
+#include "EmirGui.hpp"
 
 using namespace geode::prelude;
 
@@ -8,31 +8,23 @@ class $modify(MyMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
 
-        // Ana menüdeki alt menüyü bulalım
         auto menu = this->getChildByID("bottom-menu");
-
-        // Kütüphanemizden butonu oluşturalım
+        
+        // EmirGui ile buton oluşturma
         auto btn = EmirGui::createCircleBtn(
             "GJ_likeBtn_001.png", 
             this, 
             menu_selector(MyMenuLayer::onEmirClick)
         );
 
-        // Geode özelliklerini tanımlayalım
         btn->setID("emir-buton"_spr);
-        menu->addChild(btn);
-        
-        // Menüyü otomatik hizala (Uğraşmanı engeller)
-        menu->updateLayout();
+        EmirGui::addToMenu(dynamic_cast<CCMenu*>(menu), btn);
 
         return true;
     }
 
     void onEmirClick(CCObject* sender) {
-        FLAlertLayer::create(
-            "Başarılı!", 
-            "EmirGui kütüphanesi ve yeni dosya yapısı çalışıyor.", 
-            "Tamam"
-        )->show();
+        // Framework'teki Popup sınıfını tetikleme
+        EmirGui::Popup::create("EmirGui Paneli")->show();
     }
 };
