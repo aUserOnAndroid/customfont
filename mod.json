@@ -6,9 +6,9 @@
     },
     "id": "emir.hub",
     "name": "Emir Hub",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "developers": [
         "Emir"
     ],
-    "description": "Geometry Dash icin modern, suruklenebilir Geode mod menusu."
+    "description": "Mega-Hack tarzinda sekmeli Geode oyun ici menu; auto play, hitbox/debug araclari ve cube/wave asistleri icerir."
 }
