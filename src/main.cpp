@@ -594,12 +594,6 @@ private:
             m_speedLabel->setString(buffer);
             m_speedLabel->setColor(g_speedIndex == 2 ? ccColor3B { 185, 190, 255 } : ccColor3B { 100, 255, 125 });
         }
-    }
-
-    void updateToggleLabel(CCLabelBMFont* label, char const* name, bool enabled, ccColor3B onColor = { 100, 255, 125 }, ccColor3B offColor = { 255, 135, 135 }) {
-        if (!label) {
-            return;
-        }
 
         char buffer[64];
         std::snprintf(buffer, sizeof(buffer), "%s: %s", name, enabled ? "ON" : "OFF");
@@ -641,22 +635,6 @@ private:
 
     void applyGameplayOptions() {
         applyPlayLayerOptions(PlayLayer::get());
-    }
-
-    void onPlayerTab(CCObject*) {
-        this->switchTab(HubTab::Player);
-    }
-
-    void onAssistTab(CCObject*) {
-        this->switchTab(HubTab::Assist);
-    }
-
-    void onVisualTab(CCObject*) {
-        this->switchTab(HubTab::Visual);
-    }
-
-    void onUtilityTab(CCObject*) {
-        this->switchTab(HubTab::Utility);
     }
 
     void onPlayerTab(CCObject*) {
