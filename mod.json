@@ -5,8 +5,10 @@
         "android": "*"
     },
     "id": "emir.hub",
-    "name": "My Awesome Mod",
+    "name": "Emir Hub",
     "version": "1.0.0",
-    "developers": ["Me"],
-    "description": "Geode SDK uzerinde ilk mod denemesi."
+    "developers": [
+        "Emir"
+    ],
+    "description": "Geometry Dash icin modern, suruklenebilir Geode mod menusu."
 }
