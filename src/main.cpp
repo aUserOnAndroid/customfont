@@ -64,6 +64,17 @@ namespace {
         return label;
     }
 
+    void updateHubToggleLabel(CCLabelBMFont* label, char const* name, bool enabled, ccColor3B onColor = { 100, 255, 125 }, ccColor3B offColor = { 255, 135, 135 }) {
+        if (!label) {
+            return;
+        }
+
+        char buffer[64];
+        std::snprintf(buffer, sizeof(buffer), "%s: %s", name, enabled ? "ON" : "OFF");
+        label->setString(buffer);
+        label->setColor(enabled ? onColor : offColor);
+    }
+
     float currentSpeed() {
         auto safeIndex = std::clamp(g_speedIndex, 0, static_cast<int>(kSpeedValues.size()) - 1);
         return kSpeedValues.at(safeIndex);
@@ -338,7 +349,7 @@ public:
 
         this->createPanel(winSize);
         this->switchTab(HubTab::Assist);
-        this->refreshStateLabels();
+        this->syncStateLabels();
         this->schedule(schedule_selector(ModernMenu::tickStatus), 0.20f);
         return true;
     }
@@ -428,10 +439,10 @@ private:
         m_tabTitleLabel = makeLabel("Assist Suite", "bigFont.fnt", 0.32f, { 166.f, 207.f }, m_panel, 2);
         m_tabTitleLabel->setColor({ 165, 210, 255 });
 
-        this->addTabButton("Player", { 49.f, 184.f }, menu_selector(ModernMenu::onPlayerTab), "player-tab"_spr);
-        this->addTabButton("Assist", { 127.f, 184.f }, menu_selector(ModernMenu::onAssistTab), "assist-tab"_spr);
-        this->addTabButton("Visual", { 205.f, 184.f }, menu_selector(ModernMenu::onVisualTab), "visual-tab"_spr);
-        this->addTabButton("Utils", { 283.f, 184.f }, menu_selector(ModernMenu::onUtilityTab), "utility-tab"_spr);
+        this->addTabButton("Player", { 49.f, 184.f }, HubTab::Player, "player-tab"_spr);
+        this->addTabButton("Assist", { 127.f, 184.f }, HubTab::Assist, "assist-tab"_spr);
+        this->addTabButton("Visual", { 205.f, 184.f }, HubTab::Visual, "visual-tab"_spr);
+        this->addTabButton("Utils", { 283.f, 184.f }, HubTab::Utility, "utility-tab"_spr);
 
         m_playerPage = CCNode::create();
         m_assistPage = CCNode::create();
@@ -474,14 +485,15 @@ private:
         m_statusLabel->setColor({ 170, 240, 170 });
     }
 
-    void addTabButton(char const* text, CCPoint position, SEL_MenuHandler callback, char const* nodeID) {
+    void addTabButton(char const* text, CCPoint position, HubTab tab, char const* nodeID) {
         auto menu = CCMenu::create();
         menu->setPosition(CCPointZero);
         m_panel->addChild(menu, 4);
 
         auto sprite = ButtonSprite::create(text, 70, true, "bigFont.fnt", "GJ_button_05.png", 21.f, 0.34f);
-        auto button = CCMenuItemSpriteExtra::create(sprite, this, callback);
+        auto button = CCMenuItemSpriteExtra::create(sprite, this, menu_selector(ModernMenu::onTabButton));
         button->setPosition(position);
+        button->setTag(static_cast<int>(tab));
         button->setID(nodeID);
         menu->addChild(button);
     }
@@ -519,7 +531,7 @@ private:
         m_panel->setVisible(true);
         m_panel->runAction(CCEaseBackOut::create(CCScaleTo::create(0.18f, 1.f)));
         m_panel->runAction(CCFadeTo::create(0.12f, 255));
-        this->refreshStateLabels();
+        this->syncStateLabels();
     }
 
     void closePanel() {
@@ -564,30 +576,19 @@ private:
         }
     }
 
-    void updateToggleLabel(CCLabelBMFont* label, char const* name, bool enabled, ccColor3B onColor = { 100, 255, 125 }, ccColor3B offColor = { 255, 135, 135 }) {
-        if (!label) {
-            return;
-        }
-
-        char buffer[64];
-        std::snprintf(buffer, sizeof(buffer), "%s: %s", name, enabled ? "ON" : "OFF");
-        label->setString(buffer);
-        label->setColor(enabled ? onColor : offColor);
-    }
-
-    void refreshStateLabels() {
-        this->updateToggleLabel(m_damageLabel, "No Death", g_ignoreDamage);
-        this->updateToggleLabel(m_practiceLabel, "Practice", g_practiceMode, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_autoPlayLabel, "Auto Play", g_autoPlay, { 100, 255, 125 }, { 255, 135, 135 });
-        this->updateToggleLabel(m_cubeLabel, "Cube AI", g_autoCube, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_waveLabel, "Wave AI", g_autoWave, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_platformerLabel, "Platform", g_platformerAssist, { 100, 255, 125 }, { 185, 190, 255 });
-        this->updateToggleLabel(m_hitboxLabel, "Hitboxes", g_showHitboxes, { 100, 255, 125 }, { 185, 190, 255 });
-        this->updateToggleLabel(m_hidePlayerLabel, "Hide P1", g_hidePlayer, { 100, 255, 125 }, { 185, 190, 255 });
-        this->updateToggleLabel(m_hideGroundLabel, "Ground", g_hideGround, { 100, 255, 125 }, { 185, 190, 255 });
-        this->updateToggleLabel(m_hideMGLabel, "MG", g_hideMG, { 100, 255, 125 }, { 185, 190, 255 });
-        this->updateToggleLabel(m_hideAttemptsLabel, "Attempts", g_hideAttempts, { 100, 255, 125 }, { 185, 190, 255 });
-        this->updateToggleLabel(m_bgEffectsLabel, "BG FX", g_bgEffects, { 100, 255, 125 }, { 255, 135, 135 });
+    void syncStateLabels() {
+        updateHubToggleLabel(m_damageLabel, "No Death", g_ignoreDamage);
+        updateHubToggleLabel(m_practiceLabel, "Practice", g_practiceMode, { 100, 255, 125 }, { 255, 220, 120 });
+        updateHubToggleLabel(m_autoPlayLabel, "Auto Play", g_autoPlay, { 100, 255, 125 }, { 255, 135, 135 });
+        updateHubToggleLabel(m_cubeLabel, "Cube AI", g_autoCube, { 100, 255, 125 }, { 255, 220, 120 });
+        updateHubToggleLabel(m_waveLabel, "Wave AI", g_autoWave, { 100, 255, 125 }, { 255, 220, 120 });
+        updateHubToggleLabel(m_platformerLabel, "Platform", g_platformerAssist, { 100, 255, 125 }, { 185, 190, 255 });
+        updateHubToggleLabel(m_hitboxLabel, "Hitboxes", g_showHitboxes, { 100, 255, 125 }, { 185, 190, 255 });
+        updateHubToggleLabel(m_hidePlayerLabel, "Hide P1", g_hidePlayer, { 100, 255, 125 }, { 185, 190, 255 });
+        updateHubToggleLabel(m_hideGroundLabel, "Ground", g_hideGround, { 100, 255, 125 }, { 185, 190, 255 });
+        updateHubToggleLabel(m_hideMGLabel, "MG", g_hideMG, { 100, 255, 125 }, { 185, 190, 255 });
+        updateHubToggleLabel(m_hideAttemptsLabel, "Attempts", g_hideAttempts, { 100, 255, 125 }, { 185, 190, 255 });
+        updateHubToggleLabel(m_bgEffectsLabel, "BG FX", g_bgEffects, { 100, 255, 125 }, { 255, 135, 135 });
         if (m_speedLabel) {
             char buffer[64];
             std::snprintf(buffer, sizeof(buffer), "Speed: %.2fx", currentSpeed());
@@ -630,33 +631,22 @@ private:
             g_ignoreDamage ? "Safe" : "Live"
         );
         m_statusLabel->setString(buffer);
-        this->refreshStateLabels();
+        this->syncStateLabels();
     }
 
     void applyGameplayOptions() {
         applyPlayLayerOptions(PlayLayer::get());
     }
 
-    void onPlayerTab(CCObject*) {
-        this->switchTab(HubTab::Player);
-    }
-
-    void onAssistTab(CCObject*) {
-        this->switchTab(HubTab::Assist);
-    }
-
-    void onVisualTab(CCObject*) {
-        this->switchTab(HubTab::Visual);
-    }
-
-    void onUtilityTab(CCObject*) {
-        this->switchTab(HubTab::Utility);
+    void onTabButton(CCObject* sender) {
+        auto tab = static_cast<HubTab>(sender ? sender->getTag() : static_cast<int>(HubTab::Assist));
+        this->switchTab(tab);
     }
 
     void onToggleDamage(CCObject*) {
         g_ignoreDamage = !g_ignoreDamage;
         this->applyGameplayOptions();
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_ignoreDamage ? "No Death enabled" : "No Death disabled");
     }
 
@@ -665,7 +655,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->togglePracticeMode(g_practiceMode);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_practiceMode ? "Practice Mode enabled" : "Practice Mode disabled");
     }
 
@@ -674,19 +664,19 @@ private:
         if (!g_autoPlay) {
             releaseAutoButtons();
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_autoPlay ? "Auto Play enabled" : "Auto Play disabled");
     }
 
     void onToggleCube(CCObject*) {
         g_autoCube = !g_autoCube;
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_autoCube ? "Cube Auto enabled" : "Cube Auto disabled");
     }
 
     void onToggleWave(CCObject*) {
         g_autoWave = !g_autoWave;
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_autoWave ? "Wave Auto enabled" : "Wave Auto disabled");
     }
 
@@ -695,7 +685,7 @@ private:
         if (!g_platformerAssist) {
             releaseAutoButtons();
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_platformerAssist ? "Platform assist enabled" : "Platform assist disabled");
     }
 
@@ -705,7 +695,7 @@ private:
         g_autoWave = true;
         g_platformerAssist = true;
         this->applyGameplayOptions();
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast("Auto suite enabled");
     }
 
@@ -719,7 +709,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->togglePlayerVisibility(!g_hidePlayer);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_hidePlayer ? "Player hidden" : "Player visible");
     }
 
@@ -728,7 +718,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->toggleHideAttempts(g_hideAttempts);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_hideAttempts ? "Attempts hidden" : "Attempts visible");
     }
 
@@ -737,7 +727,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->toggleGroundVisibility(!g_hideGround);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_hideGround ? "Ground hidden" : "Ground visible");
     }
 
@@ -746,7 +736,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->toggleMGVisibility(!g_hideMG);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_hideMG ? "Middleground hidden" : "Middleground visible");
     }
 
@@ -755,7 +745,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->toggleBGEffectVisibility(g_bgEffects);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_bgEffects ? "BG effects enabled" : "BG effects disabled");
     }
 
@@ -764,7 +754,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             setDebugDrawEnabled(playLayer, g_showHitboxes);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast(g_showHitboxes ? "Hitboxes enabled" : "Hitboxes disabled");
     }
 
@@ -801,7 +791,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->updateTimeMod(currentSpeed(), true, true);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast("Speed increased");
     }
 
@@ -810,7 +800,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->updateTimeMod(currentSpeed(), true, true);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast("Speed decreased");
     }
 
@@ -819,7 +809,7 @@ private:
         if (auto playLayer = PlayLayer::get()) {
             playLayer->updateTimeMod(currentSpeed(), true, true);
         }
-        this->refreshStateLabels();
+        this->syncStateLabels();
         showToast("Speed reset");
     }
 
