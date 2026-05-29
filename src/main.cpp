@@ -167,17 +167,33 @@ namespace {
         return rect;
     }
 
-    bool looksLikeGameplayCollision(GameObject* object) {
-        if (!object || !object->isVisible() || object->m_isDisabled || object->m_isGroupDisabled || object->m_isTrigger) {
+    bool objectLooksHazardous(GameObject* object) {
+        if (!object) {
             return false;
         }
-        if (object->m_isDecoration || object->m_isDecoration2 || object->m_isPassable || object->m_isNoTouch || object->m_isInvisible) {
-            return false;
-        }
-        return object->m_objectID > 0;
+
+        static constexpr std::array<int, 31> kKnownHazardIDs = {
+            8, 39, 103, 171, 175, 176, 177, 178, 179, 180, 181, 392, 393, 394,
+            458, 459, 660, 661, 662, 1331, 1332, 1333, 1334, 1335, 1336, 1337,
+            1338, 1339, 1340, 1341, 1342
+        };
+        return object->m_slopeIsHazard || std::find(kKnownHazardIDs.begin(), kKnownHazardIDs.end(), object->m_objectID) != kKnownHazardIDs.end();
     }
 
-    std::vector<GameObject*> collectNearbyCollisionObjects(PlayLayer* layer, PlayerObject* player, float lookAhead) {
+    bool looksLikeGameplayCollision(GameObject* object) {
+        if (!object || !object->isVisible() || object->m_isDisabled || object->m_isDisabled2 || object->m_isGroupDisabled || object->m_isGroupDisabledTemp || object->m_isTrigger) {
+            return false;
+        }
+        if (object->m_isDecoration || object->m_isDecoration2 || object->m_isInvisible || object->m_objectID <= 0) {
+            return false;
+        }
+        if (objectLooksHazardous(object)) {
+            return true;
+        }
+        return !object->m_isPassable && !object->m_isNoTouch;
+    }
+
+    std::vector<GameObject*> collectNearbyCollisionObjects(PlayLayer* layer, PlayerObject* player, float lookAhead, float verticalRange = 220.f) {
         std::vector<GameObject*> objects;
         if (!layer || !player || !layer->m_objectLayer) {
             return objects;
@@ -195,7 +211,7 @@ namespace {
             if (dx < -45.f || dx > lookAhead) {
                 continue;
             }
-            if (std::abs(objectPos.y - playerPos.y) > 180.f) {
+            if (std::abs(objectPos.y - playerPos.y) > verticalRange) {
                 continue;
             }
             objects.push_back(object);
@@ -209,12 +225,14 @@ namespace {
         playerRect.origin.x -= 4.f;
         playerRect.size.width += 8.f;
 
-        auto lookAhead = std::clamp(static_cast<float>(std::abs(player->getCurrentXVelocity()) * 0.45f), 72.f, 145.f);
-        for (auto object : collectNearbyCollisionObjects(layer, player, lookAhead)) {
-            auto rect = expandedRect(object, 12.f, 8.f);
+        auto lookAhead = std::clamp(static_cast<float>(std::abs(player->getCurrentXVelocity()) * 0.50f), 84.f, 165.f);
+        for (auto object : collectNearbyCollisionObjects(layer, player, lookAhead, 240.f)) {
+            auto isHazard = objectLooksHazardous(object);
+            auto rect = expandedRect(object, isHazard ? 18.f : 12.f, isHazard ? 18.f : 8.f);
             auto isAhead = rect.getMinX() > playerPos.x - 12.f && rect.getMinX() < playerPos.x + lookAhead;
-            auto isInLane = rect.getMaxY() > playerRect.getMinY() - 10.f && rect.getMinY() < playerRect.getMaxY() + 28.f;
-            if (isAhead && isInLane) {
+            auto isInLane = rect.getMaxY() > playerRect.getMinY() - 12.f && rect.getMinY() < playerRect.getMaxY() + (isHazard ? 42.f : 30.f);
+            auto isHeadBlock = rect.getMinY() < playerRect.getMaxY() + 34.f && rect.getMaxY() > playerRect.getMaxY() - 8.f;
+            if (isAhead && isInLane && !isHeadBlock) {
                 return true;
             }
         }
@@ -223,12 +241,13 @@ namespace {
 
     bool waveShouldHold(PlayLayer* layer, PlayerObject* player) {
         auto playerPos = player->getPosition();
-        auto lookAhead = std::clamp(static_cast<float>(std::abs(player->getCurrentXVelocity()) * 0.55f), 95.f, 175.f);
+        auto lookAhead = std::clamp(static_cast<float>(std::abs(player->getCurrentXVelocity()) * 0.62f), 115.f, 215.f);
         auto targetY = playerPos.y;
         auto foundThreat = false;
 
-        for (auto object : collectNearbyCollisionObjects(layer, player, lookAhead)) {
-            auto rect = expandedRect(object, 16.f, 16.f);
+        for (auto object : collectNearbyCollisionObjects(layer, player, lookAhead, 340.f)) {
+            auto isHazard = objectLooksHazardous(object);
+            auto rect = expandedRect(object, isHazard ? 22.f : 16.f, isHazard ? 22.f : 16.f);
             if (rect.getMinX() < playerPos.x - 10.f || rect.getMinX() > playerPos.x + lookAhead) {
                 continue;
             }
@@ -265,8 +284,8 @@ namespace {
             return;
         }
 
-        auto isCube = player->isInNormalMode();
-        auto isWave = !isCube && player->isFlying();
+        auto isGroundMode = player->isInNormalMode() || player->m_isBall || player->m_isRobot || player->m_isSpider;
+        auto isFlyingMode = !isGroundMode && (player->isFlying() || player->m_isBird || player->m_isSwing || player->m_isDart);
 
         if (g_platformerAssist) {
             setRightHeld(player, true);
@@ -274,14 +293,14 @@ namespace {
             setRightHeld(player, false);
         }
 
-        if (isWave && g_autoWave) {
+        if (isFlyingMode && g_autoWave) {
             setJumpHeld(player, waveShouldHold(layer, player));
             return;
         }
 
-        if (isCube && g_autoCube) {
+        if (isGroundMode && g_autoCube) {
             auto wantsJump = cubeShouldJump(layer, player);
-            auto groundedOrSafe = player->m_lastGroundObject || player->getYVelocity() < -0.5;
+            auto groundedOrSafe = player->m_isOnGround || player->m_lastGroundObject || player->m_objectSnappedTo || player->getYVelocity() < -0.5;
             setJumpHeld(player, wantsJump && groundedOrSafe);
             return;
         }
@@ -596,21 +615,6 @@ private:
             m_speedLabel->setColor(g_speedIndex == 2 ? ccColor3B { 185, 190, 255 } : ccColor3B { 100, 255, 125 });
         }
 
-        char buffer[64];
-        std::snprintf(buffer, sizeof(buffer), "%s: %s", name, enabled ? "ON" : "OFF");
-        label->setString(buffer);
-        label->setColor(enabled ? onColor : offColor);
-    }
-
-    void refreshStateLabels() {
-        this->updateToggleLabel(m_damageLabel, "No Death", g_ignoreDamage);
-        this->updateToggleLabel(m_practiceLabel, "Practice", g_practiceMode, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_autoPlayLabel, "Auto Play", g_autoPlay, { 100, 255, 125 }, { 255, 135, 135 });
-        this->updateToggleLabel(m_cubeLabel, "Cube AI", g_autoCube, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_waveLabel, "Wave AI", g_autoWave, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_platformerLabel, "Platform", g_platformerAssist, { 100, 255, 125 }, { 185, 190, 255 });
-        this->updateToggleLabel(m_hitboxLabel, "Hitboxes", g_showHitboxes, { 100, 255, 125 }, { 185, 190, 255 });
-    }
 
     void tickStatus(float) {
         auto playLayer = PlayLayer::get();
