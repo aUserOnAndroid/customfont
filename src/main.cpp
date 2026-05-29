@@ -596,21 +596,6 @@ private:
             m_speedLabel->setColor(g_speedIndex == 2 ? ccColor3B { 185, 190, 255 } : ccColor3B { 100, 255, 125 });
         }
 
-        char buffer[64];
-        std::snprintf(buffer, sizeof(buffer), "%s: %s", name, enabled ? "ON" : "OFF");
-        label->setString(buffer);
-        label->setColor(enabled ? onColor : offColor);
-    }
-
-    void refreshStateLabels() {
-        this->updateToggleLabel(m_damageLabel, "No Death", g_ignoreDamage);
-        this->updateToggleLabel(m_practiceLabel, "Practice", g_practiceMode, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_autoPlayLabel, "Auto Play", g_autoPlay, { 100, 255, 125 }, { 255, 135, 135 });
-        this->updateToggleLabel(m_cubeLabel, "Cube AI", g_autoCube, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_waveLabel, "Wave AI", g_autoWave, { 100, 255, 125 }, { 255, 220, 120 });
-        this->updateToggleLabel(m_platformerLabel, "Platform", g_platformerAssist, { 100, 255, 125 }, { 185, 190, 255 });
-        this->updateToggleLabel(m_hitboxLabel, "Hitboxes", g_showHitboxes, { 100, 255, 125 }, { 185, 190, 255 });
-    }
 
     void tickStatus(float) {
         auto playLayer = PlayLayer::get();
