@@ -14,10 +14,10 @@ Emir Hub is an in-level Geode playtest menu for Geometry Dash. It is built as a 
 
 ### Assist tab
 - **Auto Play**: enables the assist engine.
-- **Cube AI**: attempts auto-jumps when collision objects enter the cube lane.
-- **Wave AI**: holds/releases jump to steer around nearby obstacles and level bounds.
+- **Ground AI**: detects nearby solid collision objects, spikes, and wall-like blockers, then jumps/taps for cube, ball, robot, and spider gameplay.
+- **Air AI**: steers or taps around nearby obstacles and level bounds for ship, UFO, wave, and swing gameplay.
 - **Platform**: holds the right movement input for platformer-style tests.
-- **Auto All**: enables the full assist stack at once.
+- **Auto All**: enables the full all-mode assist stack at once.
 - **Release**: force-releases any auto-held inputs.
 
 ### Visual tab
@@ -35,7 +35,7 @@ Emir Hub is an in-level Geode playtest menu for Geometry Dash. It is built as a 
 
 ## Notes
 
-Auto Play is a heuristic playtest assist, not a perfect verifier. It is intended for fast route testing in cube/wave sections and works best with **No Death** enabled while tuning hard levels.
+Auto Play is a heuristic playtest assist, not a perfect verifier. It scans visible gameplay collision objects ahead of the player and supports cube, ship, ball, UFO, wave, robot, spider, swing, and platformer-style tests. It works best with **No Death** enabled while tuning hard levels.
 
 ## Build instructions
 

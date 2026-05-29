@@ -1,3 +1,8 @@
+# 1.3.0
+- Expanded Auto Play into an all-mode assist that detects nearby gameplay collision objects, spikes, and wall-like blockers.
+- Reworked Assist toggles into Ground AI for cube/ball/robot/spider and Air AI for ship/UFO/wave/swing.
+- Added tap-pulse handling so ball, UFO, spider, and swing modes can react without sticking jump forever.
+
 # 1.2.0
 - Expanded the menu into a four-tab all-in-one hub: Player, Assist, Visual, and Utility.
 - Added additional Mega-Hack-style controls for hiding player/layers/attempts, BG effects, speed control, checkpoint clearing, and auto-input release.
