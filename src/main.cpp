@@ -15,8 +15,8 @@ namespace {
     bool g_ignoreDamage = false;
     bool g_practiceMode = false;
     bool g_autoPlay = false;
-    bool g_autoCube = true;
-    bool g_autoWave = true;
+    bool g_autoAvoidSolids = true;
+    bool g_autoAvoidSpikes = true;
     bool g_showHitboxes = false;
     bool g_platformerAssist = false;
     bool g_hidePlayer = false;
@@ -26,6 +26,8 @@ namespace {
     bool g_bgEffects = true;
     bool g_autoHoldingJump = false;
     bool g_autoHoldingRight = false;
+    int g_autoTapFrames = 0;
+    int g_autoTapCooldown = 0;
     int g_speedIndex = 2;
 
     constexpr std::array<float, 5> kSpeedValues = { 0.50f, 0.75f, 1.00f, 1.50f, 2.00f };
@@ -35,6 +37,27 @@ namespace {
         Assist,
         Visual,
         Utility
+    };
+
+    enum class PlayerMode {
+        Cube,
+        Ship,
+        Ball,
+        Ufo,
+        Wave,
+        Robot,
+        Spider,
+        Swing,
+        Unknown
+    };
+
+    struct ThreatScan {
+        bool obstacleAhead = false;
+        bool obstacleAbove = false;
+        bool obstacleBelow = false;
+        bool wallAhead = false;
+        float closestX = 9999.f;
+        float safeTargetY = 0.f;
     };
 
     constexpr auto kJumpButton = static_cast<PlayerButton>(1);
@@ -119,6 +142,8 @@ namespace {
         if (!player) {
             g_autoHoldingJump = false;
             g_autoHoldingRight = false;
+            g_autoTapFrames = 0;
+            g_autoTapCooldown = 0;
             return;
         }
 
@@ -130,6 +155,8 @@ namespace {
             player->releaseButton(kRightButton);
             g_autoHoldingRight = false;
         }
+        g_autoTapFrames = 0;
+        g_autoTapCooldown = 0;
     }
 
     void setJumpHeld(PlayerObject* player, bool held) {
@@ -145,6 +172,33 @@ namespace {
         g_autoHoldingJump = held;
     }
 
+    void startJumpTap(PlayerObject* player, int frames = 2, int cooldown = 7) {
+        if (!player || g_autoTapCooldown > 0) {
+            return;
+        }
+
+        g_autoTapFrames = std::max(frames, 1);
+        g_autoTapCooldown = std::max(cooldown, g_autoTapFrames + 1);
+        setJumpHeld(player, true);
+    }
+
+    bool updateJumpTap(PlayerObject* player) {
+        if (g_autoTapCooldown > 0) {
+            --g_autoTapCooldown;
+        }
+
+        if (g_autoTapFrames <= 0) {
+            return false;
+        }
+
+        --g_autoTapFrames;
+        setJumpHeld(player, true);
+        if (g_autoTapFrames == 0) {
+            setJumpHeld(player, false);
+        }
+        return true;
+    }
+
     void setRightHeld(PlayerObject* player, bool held) {
         if (!player || g_autoHoldingRight == held) {
             return;
@@ -158,6 +212,56 @@ namespace {
         g_autoHoldingRight = held;
     }
 
+    PlayerMode currentPlayerMode(PlayerObject* player) {
+        if (!player) {
+            return PlayerMode::Unknown;
+        }
+        if (player->m_isDart) {
+            return PlayerMode::Wave;
+        }
+        if (player->m_isShip) {
+            return PlayerMode::Ship;
+        }
+        if (player->m_isBird) {
+            return PlayerMode::Ufo;
+        }
+        if (player->m_isSwing) {
+            return PlayerMode::Swing;
+        }
+        if (player->m_isBall) {
+            return PlayerMode::Ball;
+        }
+        if (player->m_isRobot) {
+            return PlayerMode::Robot;
+        }
+        if (player->m_isSpider) {
+            return PlayerMode::Spider;
+        }
+        if (player->isInNormalMode() || player->isInBasicMode()) {
+            return PlayerMode::Cube;
+        }
+        return PlayerMode::Unknown;
+    }
+
+    char const* modeName(PlayerMode mode) {
+        switch (mode) {
+            case PlayerMode::Cube: return "Cube";
+            case PlayerMode::Ship: return "Ship";
+            case PlayerMode::Ball: return "Ball";
+            case PlayerMode::Ufo: return "UFO";
+            case PlayerMode::Wave: return "Wave";
+            case PlayerMode::Robot: return "Robot";
+            case PlayerMode::Spider: return "Spider";
+            case PlayerMode::Swing: return "Swing";
+            case PlayerMode::Unknown: return "Auto";
+        }
+        return "Auto";
+    }
+
+    bool isGroundMode(PlayerMode mode) {
+        return mode == PlayerMode::Cube || mode == PlayerMode::Ball || mode == PlayerMode::Robot || mode == PlayerMode::Spider;
+    }
+
     CCRect expandedRect(GameObject* object, float paddingX, float paddingY) {
         auto rect = object->getObjectRect();
         rect.origin.x -= paddingX;
@@ -167,23 +271,74 @@ namespace {
         return rect;
     }
 
-    bool looksLikeGameplayCollision(GameObject* object) {
-        if (!object || !object->isVisible() || object->m_isDisabled || object->m_isGroupDisabled || object->m_isTrigger) {
+    bool objectLooksHazardous(GameObject* object) {
+        if (!object) {
             return false;
         }
-        if (object->m_isDecoration || object->m_isDecoration2 || object->m_isPassable || object->m_isNoTouch || object->m_isInvisible) {
-            return false;
-        }
-        return object->m_objectID > 0;
+
+        // m_slopeIsHazard is set for spike-like slopes. The ID fallback catches the
+        // classic spike/saw families when the flag is unavailable or not populated.
+        static constexpr std::array<int, 31> kKnownHazardIDs = {
+            8, 39, 103, 171, 175, 176, 177, 178, 179, 180, 181, 392, 393, 394,
+            458, 459, 660, 661, 662, 1331, 1332, 1333, 1334, 1335, 1336, 1337,
+            1338, 1339, 1340, 1341, 1342
+        };
+        return object->m_slopeIsHazard || std::find(kKnownHazardIDs.begin(), kKnownHazardIDs.end(), object->m_objectID) != kKnownHazardIDs.end();
     }
 
-    std::vector<GameObject*> collectNearbyCollisionObjects(PlayLayer* layer, PlayerObject* player, float lookAhead) {
+
+    bool looksLikeGameplayCollision(GameObject* object) {
+        if (!object || !object->isVisible() || object->m_isDisabled || object->m_isDisabled2 || object->m_isGroupDisabled || object->m_isGroupDisabledTemp) {
+            return false;
+        }
+        if (object->m_isTrigger || object->m_isDecoration || object->m_isDecoration2 || object->m_isInvisible || object->m_objectID <= 0) {
+            return false;
+        }
+
+        // Spikes/saws are passable in the physical sense but still lethal, so keep
+        // them even when regular solid collision flags are off.
+        if (objectLooksHazardous(object)) {
+            return true;
+        }
+        return !object->m_isPassable && !object->m_isNoTouch;
+    }
+
+    float modeLookAhead(PlayerObject* player, PlayerMode mode) {
+        auto speed = std::max(260.f, std::abs(static_cast<float>(player->getCurrentXVelocity())));
+        auto base = isGroundMode(mode) ? 0.72f : 0.95f;
+        auto minLook = isGroundMode(mode) ? 145.f : 190.f;
+        auto maxLook = isGroundMode(mode) ? 285.f : 360.f;
+        return std::clamp(speed * base, minLook, maxLook);
+    }
+
+    CCRect playerRectAt(PlayerObject* player, float futureX, float futureY, float paddingX = 4.f, float paddingY = 4.f) {
+        auto rect = player->getObjectRect();
+        auto delta = CCPoint { futureX - player->getPositionX(), futureY - player->getPositionY() };
+        rect.origin.x += delta.x - paddingX;
+        rect.origin.y += delta.y - paddingY;
+        rect.size.width += paddingX * 2.f;
+        rect.size.height += paddingY * 2.f;
+        return rect;
+    }
+
+    float modeLookAhead(PlayerObject* player, PlayerMode mode) {
+        auto speed = std::abs(static_cast<float>(player->getCurrentXVelocity()));
+        auto base = isGroundMode(mode) ? 0.50f : 0.72f;
+        auto minLook = isGroundMode(mode) ? 86.f : 125.f;
+        auto maxLook = isGroundMode(mode) ? 170.f : 245.f;
+        return std::clamp(speed * base, minLook, maxLook);
+    }
+
+    std::vector<GameObject*> collectNearbyCollisionObjects(PlayLayer* layer, PlayerObject* player, float lookAhead, float verticalRange = 320.f) {
         std::vector<GameObject*> objects;
         if (!layer || !player || !layer->m_objectLayer) {
             return objects;
         }
 
         auto playerPos = player->getPosition();
+        auto lookAhead = modeLookAhead(player, mode);
+        auto verticalRange = isGroundMode(mode) ? 260.f : 380.f;
+
         for (auto node : layer->m_objectLayer->getChildrenExt()) {
             auto object = typeinfo_cast<GameObject*>(node);
             if (!looksLikeGameplayCollision(object)) {
@@ -192,70 +347,117 @@ namespace {
 
             auto objectPos = object->getPosition();
             auto dx = objectPos.x - playerPos.x;
-            if (dx < -45.f || dx > lookAhead) {
+            if (dx < -55.f || dx > lookAhead) {
                 continue;
             }
-            if (std::abs(objectPos.y - playerPos.y) > 180.f) {
+            if (std::abs(objectPos.y - playerPos.y) > verticalRange) {
                 continue;
             }
-            objects.push_back(object);
+
+            objects.push_back({ rect, hazard, std::max(0.f, dx) });
         }
+
+        std::sort(objects.begin(), objects.end(), [](DangerObject const& a, DangerObject const& b) {
+            return a.distance < b.distance;
+        });
         return objects;
     }
 
-    bool cubeShouldJump(PlayLayer* layer, PlayerObject* player) {
+    ThreatScan scanThreats(PlayLayer* layer, PlayerObject* player, PlayerMode mode) {
+        ThreatScan scan;
+        if (!layer || !player) {
+            return scan;
+        }
+
         auto playerPos = player->getPosition();
         auto playerRect = player->getObjectRect();
-        playerRect.origin.x -= 4.f;
-        playerRect.size.width += 8.f;
-
-        auto lookAhead = std::clamp(static_cast<float>(std::abs(player->getCurrentXVelocity()) * 0.45f), 72.f, 145.f);
-        for (auto object : collectNearbyCollisionObjects(layer, player, lookAhead)) {
-            auto rect = expandedRect(object, 12.f, 8.f);
-            auto isAhead = rect.getMinX() > playerPos.x - 12.f && rect.getMinX() < playerPos.x + lookAhead;
-            auto isInLane = rect.getMaxY() > playerRect.getMinY() - 10.f && rect.getMinY() < playerRect.getMaxY() + 28.f;
-            if (isAhead && isInLane) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    bool waveShouldHold(PlayLayer* layer, PlayerObject* player) {
-        auto playerPos = player->getPosition();
-        auto lookAhead = std::clamp(static_cast<float>(std::abs(player->getCurrentXVelocity()) * 0.55f), 95.f, 175.f);
-        auto targetY = playerPos.y;
-        auto foundThreat = false;
+        auto lookAhead = modeLookAhead(player, mode);
+        auto desiredY = playerPos.y;
 
         for (auto object : collectNearbyCollisionObjects(layer, player, lookAhead)) {
-            auto rect = expandedRect(object, 16.f, 16.f);
-            if (rect.getMinX() < playerPos.x - 10.f || rect.getMinX() > playerPos.x + lookAhead) {
+            auto rect = expandedRect(object, isGroundMode(mode) ? 12.f : 18.f, isGroundMode(mode) ? 10.f : 18.f);
+            auto ahead = rect.getMaxX() > playerPos.x - 18.f && rect.getMinX() < playerPos.x + lookAhead;
+            if (!ahead) {
                 continue;
             }
 
-            foundThreat = true;
-            auto centerY = rect.getMidY();
-            if (centerY < playerPos.y + 5.f) {
-                targetY = std::max(targetY, rect.getMaxY() + 58.f);
+            auto verticalOverlap = rect.getMaxY() > playerRect.getMinY() - 18.f && rect.getMinY() < playerRect.getMaxY() + 32.f;
+            auto closeX = std::max(0.f, rect.getMinX() - playerRect.getMaxX());
+            if (verticalOverlap) {
+                scan.obstacleAhead = true;
+                scan.closestX = std::min(scan.closestX, closeX);
+            }
+
+            auto objectCenterY = rect.getMidY();
+            if (objectCenterY > playerPos.y + 12.f) {
+                scan.obstacleAbove = true;
+                desiredY = std::min(desiredY, rect.getMinY() - 62.f);
+            } else if (objectCenterY < playerPos.y - 12.f) {
+                scan.obstacleBelow = true;
+                desiredY = std::max(desiredY, rect.getMaxY() + 62.f);
             } else {
-                targetY = std::min(targetY, rect.getMinY() - 58.f);
+                scan.wallAhead = true;
+                desiredY += player->m_isUpsideDown ? -70.f : 70.f;
+            }
+
+            if (verticalOverlap && rect.size.height > playerRect.size.height * 1.10f && closeX < 70.f) {
+                scan.wallAhead = true;
             }
         }
+        return player->m_isUpsideDown ? yVelocity > 2.2f : yVelocity < -2.2f;
+    }
 
-        if (!foundThreat) {
-            auto winHeight = CCDirector::sharedDirector()->getWinSize().height;
-            auto softTop = layer->m_objectLayer->convertToNodeSpace({ 0.f, winHeight - 44.f }).y;
-            auto softBottom = layer->m_objectLayer->convertToNodeSpace({ 0.f, 52.f }).y;
-            if (playerPos.y < softBottom) {
-                return true;
-            }
-            if (playerPos.y > softTop) {
-                return false;
-            }
-            return player->getYVelocity() < -2.0;
+        scan.safeTargetY = desiredY;
+        return scan;
+    }
+
+    bool shouldGroundJump(PlayLayer* layer, PlayerObject* player, PlayerMode mode) {
+        auto scan = scanThreats(layer, player, mode);
+        if (!scan.obstacleAhead && !scan.wallAhead) {
+            return false;
+        }
+        return player->m_isUpsideDown ? yVelocity > 2.2f : yVelocity < -2.2f;
+    }
+
+        auto grounded = player->m_isOnGround || player->m_lastGroundObject || player->m_objectSnappedTo;
+        auto yVelocity = player->getYVelocity();
+        auto nearEnough = scan.closestX < (mode == PlayerMode::Robot ? 130.f : 102.f);
+
+        if (mode == PlayerMode::Ball || mode == PlayerMode::Spider) {
+            return grounded && nearEnough;
+        }
+        if (mode == PlayerMode::Robot) {
+            return nearEnough && (grounded || (player->m_isUpsideDown ? yVelocity > 0.5 : yVelocity < -0.5));
+        }
+        return nearEnough && grounded;
+    }
+
+    bool shouldFlightHold(PlayLayer* layer, PlayerObject* player, PlayerMode mode) {
+        auto playerPos = player->getPosition();
+        auto scan = scanThreats(layer, player, mode);
+        auto winHeight = CCDirector::sharedDirector()->getWinSize().height;
+        auto softTop = layer->m_objectLayer->convertToNodeSpace({ 0.f, winHeight - 48.f }).y;
+        auto softBottom = layer->m_objectLayer->convertToNodeSpace({ 0.f, 52.f }).y;
+
+        if (playerPos.y < softBottom || scan.obstacleBelow || scan.wallAhead) {
+            return !player->m_isUpsideDown;
+        }
+        if (playerPos.y > softTop || scan.obstacleAbove) {
+            return player->m_isUpsideDown;
+        }
+        if (scan.safeTargetY != 0.f && std::abs(scan.safeTargetY - playerPos.y) > 16.f) {
+            return (scan.safeTargetY > playerPos.y) != player->m_isUpsideDown;
         }
 
-        return targetY > playerPos.y;
+        auto yVelocity = player->getYVelocity();
+        return player->m_isUpsideDown ? yVelocity > 2.0 : yVelocity < -2.0;
+    }
+
+    bool shouldTapFlight(PlayLayer* layer, PlayerObject* player, PlayerMode mode) {
+        auto wantsLift = shouldFlightHold(layer, player, mode);
+        auto scan = scanThreats(layer, player, mode);
+        auto urgent = scan.obstacleBelow || scan.wallAhead || player->getYVelocity() < -4.0;
+        return wantsLift && (urgent || g_autoTapCooldown == 0);
     }
 
     void runAutoPlay(PlayLayer* layer) {
@@ -265,8 +467,7 @@ namespace {
             return;
         }
 
-        auto isCube = player->isInNormalMode();
-        auto isWave = !isCube && player->isFlying();
+        auto mode = currentPlayerMode(player);
 
         if (g_platformerAssist) {
             setRightHeld(player, true);
@@ -274,15 +475,36 @@ namespace {
             setRightHeld(player, false);
         }
 
-        if (isWave && g_autoWave) {
-            setJumpHeld(player, waveShouldHold(layer, player));
+        if (updateJumpTap(player)) {
             return;
         }
 
-        if (isCube && g_autoCube) {
-            auto wantsJump = cubeShouldJump(layer, player);
-            auto groundedOrSafe = player->m_lastGroundObject || player->getYVelocity() < -0.5;
-            setJumpHeld(player, wantsJump && groundedOrSafe);
+        if (isGroundMode(mode) && g_autoCube) {
+            auto wantsJump = shouldGroundJump(layer, player, mode);
+            if (mode == PlayerMode::Ball || mode == PlayerMode::Spider) {
+                if (wantsJump) {
+                    startJumpTap(player, 1, mode == PlayerMode::Spider ? 9 : 7);
+                } else {
+                    setJumpHeld(player, false);
+                }
+                return;
+            }
+
+            setJumpHeld(player, wantsJump);
+            return;
+        }
+
+        if (!isGroundMode(mode) && g_autoWave) {
+            if (mode == PlayerMode::Ufo || mode == PlayerMode::Swing) {
+                if (shouldTapFlight(layer, player, mode)) {
+                    startJumpTap(player, 2, mode == PlayerMode::Ufo ? 10 : 8);
+                } else {
+                    setJumpHeld(player, false);
+                }
+                return;
+            }
+
+            setJumpHeld(player, shouldFlightHold(layer, player, mode));
             return;
         }
 
@@ -461,8 +683,8 @@ private:
         this->addActionButton(m_playerPage, "Info", { 259.f, 82.f }, menu_selector(ModernMenu::onInfoLabel), "info-toggle"_spr);
 
         m_autoPlayLabel = this->addActionButton(m_assistPage, "Auto Play", { 73.f, 135.f }, menu_selector(ModernMenu::onToggleAutoPlay), "autoplay-toggle"_spr);
-        m_cubeLabel = this->addActionButton(m_assistPage, "Cube AI", { 166.f, 135.f }, menu_selector(ModernMenu::onToggleCube), "cube-toggle"_spr);
-        m_waveLabel = this->addActionButton(m_assistPage, "Wave AI", { 259.f, 135.f }, menu_selector(ModernMenu::onToggleWave), "wave-toggle"_spr);
+        m_cubeLabel = this->addActionButton(m_assistPage, "Ground AI", { 166.f, 135.f }, menu_selector(ModernMenu::onToggleCube), "cube-toggle"_spr);
+        m_waveLabel = this->addActionButton(m_assistPage, "Air AI", { 259.f, 135.f }, menu_selector(ModernMenu::onToggleWave), "wave-toggle"_spr);
         m_platformerLabel = this->addActionButton(m_assistPage, "Platform", { 73.f, 82.f }, menu_selector(ModernMenu::onTogglePlatformer), "platform-toggle"_spr);
         this->addActionButton(m_assistPage, "Auto All", { 166.f, 82.f }, menu_selector(ModernMenu::onAutoAll), "auto-all"_spr);
         this->addActionButton(m_assistPage, "Release", { 259.f, 82.f }, menu_selector(ModernMenu::onReleaseInputs), "release-inputs"_spr);
@@ -580,8 +802,8 @@ private:
         updateHubToggleLabel(m_damageLabel, "No Death", g_ignoreDamage);
         updateHubToggleLabel(m_practiceLabel, "Practice", g_practiceMode, { 100, 255, 125 }, { 255, 220, 120 });
         updateHubToggleLabel(m_autoPlayLabel, "Auto Play", g_autoPlay, { 100, 255, 125 }, { 255, 135, 135 });
-        updateHubToggleLabel(m_cubeLabel, "Cube AI", g_autoCube, { 100, 255, 125 }, { 255, 220, 120 });
-        updateHubToggleLabel(m_waveLabel, "Wave AI", g_autoWave, { 100, 255, 125 }, { 255, 220, 120 });
+        updateHubToggleLabel(m_cubeLabel, "Ground AI", g_autoCube, { 100, 255, 125 }, { 255, 220, 120 });
+        updateHubToggleLabel(m_waveLabel, "Air AI", g_autoWave, { 100, 255, 125 }, { 255, 220, 120 });
         updateHubToggleLabel(m_platformerLabel, "Platform", g_platformerAssist, { 100, 255, 125 }, { 185, 190, 255 });
         updateHubToggleLabel(m_hitboxLabel, "Hitboxes", g_showHitboxes, { 100, 255, 125 }, { 185, 190, 255 });
         updateHubToggleLabel(m_hidePlayerLabel, "Hide P1", g_hidePlayer, { 100, 255, 125 }, { 185, 190, 255 });
@@ -595,7 +817,7 @@ private:
             m_speedLabel->setString(buffer);
             m_speedLabel->setColor(g_speedIndex == 2 ? ccColor3B { 185, 190, 255 } : ccColor3B { 100, 255, 125 });
         }
-
+    }
 
     void tickStatus(float) {
         auto playLayer = PlayLayer::get();
@@ -610,7 +832,7 @@ private:
             sizeof(buffer),
             "%.2f%% | %s %s %.2fx %s",
             percent,
-            g_autoPlay ? "Auto" : "Manual",
+            g_autoPlay ? modeName(currentPlayerMode(playLayer->m_player1)) : "Manual",
             g_showHitboxes ? "Hitbox" : "Clean",
             currentSpeed(),
             g_ignoreDamage ? "Safe" : "Live"
@@ -654,15 +876,15 @@ private:
     }
 
     void onToggleCube(CCObject*) {
-        g_autoCube = !g_autoCube;
+        g_autoAvoidSolids = !g_autoAvoidSolids;
         this->syncStateLabels();
-        showToast(g_autoCube ? "Cube Auto enabled" : "Cube Auto disabled");
+        showToast(g_autoCube ? "Ground Auto enabled" : "Ground Auto disabled");
     }
 
     void onToggleWave(CCObject*) {
-        g_autoWave = !g_autoWave;
+        g_autoAvoidSpikes = !g_autoAvoidSpikes;
         this->syncStateLabels();
-        showToast(g_autoWave ? "Wave Auto enabled" : "Wave Auto disabled");
+        showToast(g_autoWave ? "Air Auto enabled" : "Air Auto disabled");
     }
 
     void onTogglePlatformer(CCObject*) {
@@ -676,12 +898,11 @@ private:
 
     void onAutoAll(CCObject*) {
         g_autoPlay = true;
-        g_autoCube = true;
-        g_autoWave = true;
-        g_platformerAssist = true;
+        g_autoAvoidSolids = true;
+        g_autoAvoidSpikes = true;
         this->applyGameplayOptions();
         this->syncStateLabels();
-        showToast("Auto suite enabled");
+        showToast("Detailed Auto Play enabled");
     }
 
     void onReleaseInputs(CCObject*) {
@@ -818,7 +1039,7 @@ private:
         FLAlertLayer::create(
             "Emir Hub",
             "<cg>Emir Hub</c> is an all-in-one playtest hub with tabs for Player, Assist, Visual and Utility tools.\n\n"
-            "Includes No Death, Practice, Auto Play, cube/wave assists, platform helpers, hitboxes, visibility toggles, speed control and checkpoint tools.",
+            "Includes No Death, Practice, Auto Play for cube, ship, ball, UFO, wave, robot, spider and swing, platform helpers, hitboxes, visibility toggles, speed control and checkpoint tools.",
             "OK"
         )->show();
     }
