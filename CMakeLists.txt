@@ -20,6 +20,11 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 
-target_link_libraries(${PROJECT_NAME} geode-loader)
+# Ensure geode-loader is available before linking
+if(TARGET geode-loader)
+    target_link_libraries(${PROJECT_NAME} geode-loader)
+else()
+    message(FATAL_ERROR "geode-loader target not found. Geode SDK may not have been properly configured.")
+endif()
 
 setup_geode_mod(${PROJECT_NAME})
