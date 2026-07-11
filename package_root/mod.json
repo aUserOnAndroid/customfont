@@ -1,0 +1,17 @@
+{
+  "geode": "3.0.0",
+  "id": "auseronandroid.customfont",
+  "name": "CustomFont",
+  "version": "1.0.0",
+  "description": "An awesome mod that imports custom fonts into Geometry Dash!",
+  "developer": "aUserOnAndroid",
+  "gd": {
+    "win": "2.2081",
+    "android": "2.2081",
+    "mac": "2.2081",
+    "ios": "2.2081"
+  },
+  "dependencies": {
+    "geode.node-ids": ">=v1.23.3"
+  }
+}

@@ -9,32 +9,37 @@ find_package(Freetype REQUIRED)
 
 # Add source files
 set(SOURCES
-    src/main.cpp
     src/font_loader.cpp
+)
+
+set(DEMO_SOURCES
+    src/main.cpp
 )
 
 set(HEADERS
     include/font_loader.h
 )
 
-# Create library
-add_library(customfont ${SOURCES} ${HEADERS})
+# Create shared library for Geode plugin
+add_library(customfont SHARED ${SOURCES} ${HEADERS})
+set_target_properties(customfont PROPERTIES OUTPUT_NAME "auseronandroid.customfont")
+set_target_properties(customfont PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Include directories
 target_include_directories(customfont
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
-    PRIVATE
         ${FREETYPE_INCLUDE_DIRS}
 )
 
 # Link libraries
 target_link_libraries(customfont
-    PUBLIC
+    PRIVATE
         ${FREETYPE_LIBRARIES}
 )
 
-# Create executable (optional)
-add_executable(customfont_demo src/main.cpp)
-target_link_libraries(customfont_demo customfont)
+# Create executable demo
+add_executable(customfont_demo ${DEMO_SOURCES})
+target_include_directories(customfont_demo PRIVATE ${FREETYPE_INCLUDE_DIRS})
+target_link_libraries(customfont_demo PRIVATE customfont)
