@@ -1,28 +1,40 @@
-cmake_minimum_required(VERSION 3.21)
-set(CMAKE_CXX_STANDARD 23)
+cmake_minimum_required(VERSION 3.10)
+project(customfont)
+
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS" OR IOS)
-    set(CMAKE_OSX_ARCHITECTURES "arm64")
-else()
-    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
-endif()
-set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-project(Template VERSION 1.0.0)
+# Find required packages
+find_package(Freetype REQUIRED)
 
-# Add all source files inside src (recursively)
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
+# Add source files
+set(SOURCES
+    src/main.cpp
+    src/font_loader.cpp
+)
 
-# Set up the mod binary
-add_library(${PROJECT_NAME} SHARED ${SOURCES})
+set(HEADERS
+    include/font_loader.h
+)
 
-if (NOT DEFINED ENV{GEODE_SDK})
-    message(FATAL_ERROR "Unable to find Geode SDK! Please define GEODE_SDK environment variable to point to Geode")
-else()
-    message(STATUS "Found Geode: $ENV{GEODE_SDK}")
-endif()
+# Create library
+add_library(customfont ${SOURCES} ${HEADERS})
 
-add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
+# Include directories
+target_include_directories(customfont
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${FREETYPE_INCLUDE_DIRS}
+)
 
-# Set up dependencies, resources, and link Geode.
-setup_geode_mod(${PROJECT_NAME})
+# Link libraries
+target_link_libraries(customfont
+    PUBLIC
+        ${FREETYPE_LIBRARIES}
+)
+
+# Create executable (optional)
+add_executable(customfont_demo src/main.cpp)
+target_link_libraries(customfont_demo customfont)
