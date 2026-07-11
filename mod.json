@@ -6,10 +6,10 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"id": "katipli.customfont",
+	"id": "auseronandroid.customfont",
 	"name": "CustomFont",
 	"version": "1.0.0",
-	"developer": "katipli",
+	"developer": "aUserOnAndroid",
 	"description": "An awesome mod that imports custom fonts into Geometry Dash!",
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
