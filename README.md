@@ -1,4 +1,4 @@
-# CustomFont
+ CustomFont
 
 A C++ library for loading and using custom TTF and OTF fonts to replace default system fonts.
 
@@ -117,10 +117,3 @@ The library provides detailed error messages for common issues:
 
 Check console output for detailed error information.
 
-## License
-
-(Add your license here)
-
-## Contributing
-
-Feel free to submit issues and enhancement requests!
